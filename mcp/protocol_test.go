@@ -1217,6 +1217,70 @@ func TestInputRequestMapJSON(t *testing.T) {
 	})
 }
 
+func TestCallToolResultPreservesStructuredContentNumberPrecision(t *testing.T) {
+	const input = `{"content":[],"structuredContent":{"id":9007199254740993,"safe":42,"fraction":0.1,"ids":[9007199254740993,42]}}`
+
+	var result CallToolResult
+	if err := json.Unmarshal([]byte(input), &result); err != nil {
+		t.Fatal(err)
+	}
+
+	structured, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("structured content has type %T, want map[string]any", result.StructuredContent)
+	}
+	if got, ok := structured["id"].(json.Number); !ok || got.String() != "9007199254740993" {
+		t.Fatalf("structured content id = %#v (%T), want exact json.Number", structured["id"], structured["id"])
+	}
+	if got, ok := structured["safe"].(float64); !ok || got != 42 {
+		t.Fatalf("structured content safe = %#v (%T), want float64(42)", structured["safe"], structured["safe"])
+	}
+	if got, ok := structured["fraction"].(float64); !ok || got != 0.1 {
+		t.Fatalf("structured content fraction = %#v (%T), want float64(0.1)", structured["fraction"], structured["fraction"])
+	}
+	ids, ok := structured["ids"].([]any)
+	if !ok {
+		t.Fatalf("structured content ids has type %T, want []any", structured["ids"])
+	}
+	if got, ok := ids[0].(json.Number); !ok || got.String() != "9007199254740993" {
+		t.Fatalf("structured content ids[0] = %#v (%T), want exact json.Number", ids[0], ids[0])
+	}
+	if got, ok := ids[1].(float64); !ok || got != 42 {
+		t.Fatalf("structured content ids[1] = %#v (%T), want float64(42)", ids[1], ids[1])
+	}
+
+	encoded, err := json.Marshal(&result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire struct {
+		StructuredContent json.RawMessage `json:"structuredContent"`
+	}
+	if err := json.Unmarshal(encoded, &wire); err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]json.RawMessage
+	if err := json.Unmarshal(wire.StructuredContent, &got); err != nil {
+		t.Fatal(err)
+	}
+	if string(got["id"]) != "9007199254740993" {
+		t.Errorf("round-trip structured content id = %s, want 9007199254740993", got["id"])
+	}
+}
+
+func TestCallToolResultPreservesRootStructuredContentNumberPrecision(t *testing.T) {
+	const input = `{"content":[],"structuredContent":9007199254740993}`
+
+	var result CallToolResult
+	if err := json.Unmarshal([]byte(input), &result); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := result.StructuredContent.(json.Number)
+	if !ok || got.String() != "9007199254740993" {
+		t.Fatalf("structured content = %#v (%T), want exact json.Number", result.StructuredContent, result.StructuredContent)
+	}
+}
+
 func TestInputResponseMapJSON(t *testing.T) {
 	tests := []struct {
 		name  string
