@@ -822,44 +822,6 @@ func TestAddToolGenericNonObjectOutput(t *testing.T) {
 	})
 }
 
-func TestCallToolStructuredContentPreservesLargeInteger(t *testing.T) {
-	ctx := context.Background()
-	server := NewServer(testImpl, nil)
-	server.AddTool(&Tool{
-		Name:        "large_integer",
-		InputSchema: &jsonschema.Schema{Type: "object"},
-	}, func(context.Context, *CallToolRequest) (*CallToolResult, error) {
-		return &CallToolResult{
-			Content:           []Content{&TextContent{Text: "ok"}},
-			StructuredContent: json.RawMessage(`{"id":9007199254740993}`),
-		}, nil
-	})
-
-	clientTransport, serverTransport := NewInMemoryTransports()
-	if _, err := server.Connect(ctx, serverTransport, nil); err != nil {
-		t.Fatal(err)
-	}
-	client := NewClient(testImpl, nil)
-	clientSession, err := client.Connect(ctx, clientTransport, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer clientSession.Close()
-
-	result, err := clientSession.CallTool(ctx, &CallToolParams{Name: "large_integer"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	structured, ok := result.StructuredContent.(map[string]any)
-	if !ok {
-		t.Fatalf("structured content has type %T, want map[string]any", result.StructuredContent)
-	}
-	got, ok := structured["id"].(json.Number)
-	if !ok || got.String() != "9007199254740993" {
-		t.Fatalf("structured content id = %#v (%T), want exact json.Number", structured["id"], structured["id"])
-	}
-}
-
 // TestAddToolInputSchemaComposition verifies SEP-2106 (input side): composition
 // keywords such as oneOf are allowed on the input schema alongside
 // type:"object".

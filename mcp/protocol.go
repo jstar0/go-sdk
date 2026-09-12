@@ -8,8 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"math"
-	"math/big"
 
 	internaljson "github.com/modelcontextprotocol/go-sdk/internal/json"
 	"github.com/modelcontextprotocol/go-sdk/internal/mcpgodebug"
@@ -393,19 +391,11 @@ func (x *CallToolResult) UnmarshalJSON(data []byte) error {
 	type res CallToolResult // avoid recursion
 	var wire struct {
 		res
-		Content           []*wireContent  `json:"content"`
-		ResultType        resultType      `json:"resultType"`
-		StructuredContent json.RawMessage `json:"structuredContent"`
+		Content    []*wireContent `json:"content"`
+		ResultType resultType     `json:"resultType"`
 	}
 	if err := internaljson.Unmarshal(data, &wire); err != nil {
 		return err
-	}
-	if len(wire.StructuredContent) > 0 {
-		var structured any
-		if err := internaljson.UnmarshalUseNumber(wire.StructuredContent, &structured); err != nil {
-			return err
-		}
-		wire.res.StructuredContent = preserveJSONNumbers(structured)
 	}
 	var err error
 	if wire.res.Content, err = contentsFromWire(wire.Content, nil); err != nil {
@@ -414,48 +404,6 @@ func (x *CallToolResult) UnmarshalJSON(data []byte) error {
 	wire.res.resultType = wire.ResultType
 	*x = CallToolResult(wire.res)
 	return nil
-}
-
-// preserveJSONNumbers keeps the existing float64 representation when it can
-// round-trip a JSON number without changing its value. Numbers that would
-// lose information remain json.Number so callers can handle them exactly.
-func preserveJSONNumbers(value any) any {
-	switch value := value.(type) {
-	case map[string]any:
-		for key, elem := range value {
-			value[key] = preserveJSONNumbers(elem)
-		}
-	case []any:
-		for i, elem := range value {
-			value[i] = preserveJSONNumbers(elem)
-		}
-	case json.Number:
-		if number, ok := losslessFloat64(value); ok {
-			return number
-		}
-	}
-	return value
-}
-
-func losslessFloat64(value json.Number) (float64, bool) {
-	number, err := value.Float64()
-	if err != nil || math.IsInf(number, 0) || math.IsNaN(number) {
-		return 0, false
-	}
-
-	original, ok := new(big.Rat).SetString(value.String())
-	if !ok {
-		return 0, false
-	}
-	encoded, err := json.Marshal(number)
-	if err != nil {
-		return 0, false
-	}
-	roundTripped, ok := new(big.Rat).SetString(string(encoded))
-	if !ok || original.Cmp(roundTripped) != 0 {
-		return 0, false
-	}
-	return number, true
 }
 
 func (x *CallToolParams) isParams()              {}
